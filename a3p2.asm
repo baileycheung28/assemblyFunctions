@@ -71,7 +71,7 @@ begDW_M:#//   {
 					addi $a2, $sp, 24
 					jal ShowArrayLabeled
 #                ProcArrays(&used3, a1, a2, a3, &used1, &used2);
-					addi $a0, $sp, 172
+					addi $a0, $sp, 172	
 					addi $a1, $sp, 184
 					addi $a2, $sp, 232
 					addi $a3, $sp, 280
@@ -617,6 +617,13 @@ CopyArray:
 #             hopPtr1 = sIntArr;
 #             hopPtr2 = dIntArr;
 #             goto F_CATest;
+					sw $zero, 0($a1)
+					sll $v1, $a3, 2
+					add $t9, $a2, $v1
+					
+					move $t1, $a2
+					move $t2, $a0
+					j F_CATest
 begF_CA:#//   {
 #                *hopPtr2 = *hopPtr1;
 #                ++(*dSizePtr);
@@ -624,9 +631,18 @@ begF_CA:#//   {
 #             ++hopPtr1;
 #             ++hopPtr2;
 #//           }
+					lw $t3, 0($t1)
+					sw $t3, 0($t2)
+					
+					lw $t4, 0($a1)
+					addi $t4, $t4, 4
+					sw $t4, 0($a1)
+					
+					addi $t1, $t1, 4
+					addi $t2, $t2, 4
 F_CATest:
 #             if (hopPtr1 < endPtr1) goto begF_CA;
-
+					blt $t1, $t9, begF_CA
 					########## (14) ##########
 					
 					# EPILOG:
@@ -672,8 +688,10 @@ ProcArrayL_Aux:
 # (usual ones for function call)
 ###############################################################################
 					# PROLOG:
-					
-					# BODY:
+					addiu $sp, $sp, -32
+					sw $ra, 28($sp)
+					sw $fp, 24($sp)
+					addiu $fp, $sp, 32
 #             int* hopPtr22;
 #             int* hopPtr222;
 #             int anchor;
@@ -684,17 +702,33 @@ ProcArrayL_Aux:
 #             //for (hopPtr22 = begPtr + 1; hopPtr22 < endPtr; ++hopPtr22)
 #             hopPtr22 = begPtr + 1;
 #             goto F1_PALATest;
+					#BODY
+					lw $t4, 0($a0)
+					move $s2, $t4
+					li $v0, 0
+					lw $t5, 0($a0)
+					addi $t5, $t5, 4 
+					move $t2, $t5
+					j F1_PALATest
+
 begF1_PALA:#//{
 #                //if (*hopPtr22 == anchor)
 #                if (*hopPtr22 != anchor) goto endI_PALA;
+					lw $t6, 0($t2)
+					bne $t6, $s2, endI_PALA
 begI_PALA:#//    {
 #                   //for (hopPtr222 = hopPtr22 + 1; hopPtr222 < endPtr; ++hopPtr222)
 #                   hopPtr222 = hopPtr22 + 1;
 #                   goto F2_PALATest;
+					addi $t3, $t2, 4
+					j F2_PALATest
 begF2_PALA:#//      {
 #                      *(hopPtr222 - 1) = *hopPtr222;
 #                   ++hopPtr222;
 #//                 }
+					lw $t7, 0($t3)
+					sw $t7, -4($t3)
+					addi $t3, $t3, 4
 F2_PALATest:
 #                   if (hopPtr222 < endPtr) goto begF2_PALA;
 #
@@ -703,14 +737,26 @@ F2_PALATest:
 #                   --endPtr;
 #                   --hopPtr22;
 #                   ++remCount;
+					blt $t3, $a1, begF2_PALA
+					lw $t8, -4($a2)
+					sw $t8, 0($a2)
+					addi $a1, $a1, -4
+					addi $t2, $t2, -4
+					addi $v0, $v0, 1
+	
 endI_PALA:#//    }
 #             ++hopPtr22;
 #//           }
+					addi $t2, $t2, 4
 F1_PALATest:
 #             if (hopPtr22 < endPtr) goto begF1_PALA;
-
+					blt $t2, $a1, begF1_PALA
+					
 					# EPILOG:
-
+					sw $s2, 0($sp)
+					lw $fp, 24($sp)
+					lw $ra, 28($sp)
+					addiu $sp, $sp, 32				
 					########## (29) ##########
 
 #             return remCount;
@@ -754,7 +800,15 @@ ProcArrayL:
 # $v1: holder for a value/address
 # (usual ones for function call)
 ###############################################################################
+
 					# PROLOG:
+					addiu $sp, $sp, -40
+					sw $ra, 36($sp)
+					sw $fp, 32($sp)
+					addiu $fp, $sp, 40
+					
+					sw $a0, 0($fp)
+					sw $a1, 4($fp)
 					
 					# BODY:
 #             int* hopPtr2;
@@ -765,21 +819,43 @@ ProcArrayL:
 #             //for (hopPtr2 = intArr; hopPtr2 < endPtr2; ++hopPtr2)
 #             hopPtr2 = intArr;
 #             goto F_PALTest;
+					lw $t3, 0($a1)
+					sll $t3, $t3, 2
+					add $s2, $a0, $t3
+					move $t2, $a0
+		
+					j F_PALTest
 begF_PAL:#//  {
 #                remCount = ProcArrayL_Aux(hopPtr2, endPtr2, usedPtr);
 #                //if (remCount != 0)
 #                if (remCount == 0) goto endI_PAL;
+					move $a2, $a1,
+					move $a0, $t2
+					move $a1, $s2
+					jal ProcArrayL_Aux
+					beqz $v0, endI_PAL
 begI_PAL:#//     {
 #                   --hopPtr2;
 #                   endPtr2 -= remCount;
+					addi $t2, $t2, -4
+					sub $s2, $s2, $v0
 endI_PAL:#//     }
 #             ++hopPtr2;
 #//           }
+					addi $t2, $t2, 4
 F_PALTest:
 #             if (hopPtr2 < endPtr2) goto begF_PAL;
+					blt $t2, $s2, begF_PAL
 					
 					# EPILOG:
+					sw $s2, 16($sp)
+					sw $t2, 24($sp)
+					sw $a0, 0($sp)
+					sw $a1, 4($sp)
 					
+					lw $fp, 32($sp)
+					lw $ra, 36($sp)					
+				
 					########## (27) ##########
 
 #}
@@ -832,23 +908,38 @@ RemAllOccur:
 #             //for (hopPtr = begPtr; hopPtr < endPtr; ++hopPtr)
 #             hopPtr = begPtr; 
 #             goto F_RAOTest;
+					li $v0, 0 
+					move $t1, $a0
+					j F_RAOTest
 begF_RAO:#//  {
 #                //if (*hopPtr == target)
 #                if (*hopPtr != target) goto elseI_RAO;
+					lw $t2, 0($t1)
+					bne $t2, $a2, elseI_RAO
 begI_RAO:#//     {
 #                   ++remCount;
 #                goto endI_RAO;
 #//              }
+					addi $v0, $v0, 1
+					j endI_RAO
 elseI_RAO:#//    else
 #//              {
 #                   *(hopPtr - remCount) = (*hopPtr);
+					lw $t3, 0($t1)
+					sll $t4, $v0, 2
+					sub $t1, $t1, $t4
+					sw $t3, 0($t1)
 endI_RAO:#//     }
 #             ++hopPtr;
 #//           }
+					addi $t1, $t1, 4 
 F_RAOTest:
 #             if (hopPtr < endPtr) goto begF_RAO;
+					blt $t1, $a1, begF_RAO 
+					
+					########## (13) ##########	
 
-					########## (13) ##########
+					
 
 #             return remCount;
 					# EPILOG:
@@ -896,6 +987,15 @@ ProcArrayM:
 # (usual ones for function call)
 ###############################################################################
 					# PROLOG:
+					addiu $sp, $sp, -32
+					sw $ra, 28($sp)
+					sw $fp, 24($sp)
+					addiu $fp, $sp, 32
+					
+					sw $a0, 0($fp)
+					sw $a1, 4($fp)
+					sw $a2, 8($fp)
+					sw $a3, 12($fp)
 					
 					# BODY:
 #             int remCount;
@@ -907,6 +1007,11 @@ ProcArrayM:
 #             endPtr1 = a1 + (*used1Ptr);
 #             //while (hopPtr1 < endPtr1)
 #             goto W_PAMTest;
+					move $t1, $a0
+					lw $t4, 0($a1)
+					sll $t4, $t4, 2
+					add $t9, $a0, $t4
+					j W_PAMTest
 begW_PAM:#//  {
 #                *(a3 + *used3Ptr) = *hopPtr1;
 #                ++(*used3Ptr);
@@ -916,10 +1021,42 @@ begW_PAM:#//  {
 #                endPtr1 -= remCount;
 #                ++hopPtr1;
 #//           }
-W_PAMTest:
+					lw $t5, 0($a3)
+					sll $t5, $t5, 2
+					add $a2, $a2, $t5
+					
+					lw $t6, 0($t1)
+					sw $t6, 0($a2)
+					lw $t7, 0($a3)
+					addi $t7, $t7, 4
+					
+					sw $t7, 0($a3)
+					addi $a0, $t1, 4
+					
+					move $a1, $t9
+					lw $a2, 0($t1)
+					jal RemAllOccur
+					
+					lw $a0, 0($fp)
+					lw $a1, 4($fp)
+					lw $a2, 8($fp)
+					lw $a3, 12($fp)
+					
+					lw $t4, 0($a1)
+					sub $t4, $t4, $v0
+					sw $t4, 0($a1)
+					
+					sll $v0, $v0, 2
+					sub $t9, $t9, $v0
+					addi $t1, $t1, 4
+					
 #             if (hopPtr1 < endPtr1) goto begW_PAM;
+W_PAMTest:				blt $t1, $t9, begW_PAM
 					
 					# EPILOG:
+					lw $fp, 24($sp)
+					lw $ra, 28($sp)
+					addiu $sp, $sp, 32 
 					
 					########## (44) ##########
 
@@ -977,21 +1114,30 @@ ProcArrays:
 					move $a0, $a2				# a2 as arg1 ($a2 is still as received)
 					move $a2, $a1				# a1 as arg3 ($a1 is still as received)
 					
-					########## (3) ##########
+					########## (3) ##########		#finished
+					lw $a1, 20($fp)
+					lw $v1, 16($sp)
+					lw $a3, 0($v1) 		
 					
 					jal CopyArray
 					#j begDebugShowA2_CA			# uncomment this instruction if useful when debugging 
 endDebugShowA2_CA:					
 #   ProcArrayL(a2, used2Ptr);
 					
-					########## (2) ##########
+					########## (2) ##########	#working 
+					lw $a0, 8($fp)
+					addi $a1, $sp, 176
 					
 					jal ProcArrayL
 					#j begDebugShowA2_PAL			# uncomment this instruction if useful when debugging
 endDebugShowA2_PAL:					
 #   ProcArrayM(a1, used1Ptr, a3, used3Ptr);
 					
-					########## (4) ##########
+					########## (4) ##########	#finished
+					lw $a0, 4($fp)
+					addi $a1, $sp, 180
+					lw $a2, 12($fp)
+					lw $a3, 0($sp)
 					
 					jal ProcArrayM
 					#j begDebugShowA1A2_PAM			# uncomment this instruction if useful when debugging
